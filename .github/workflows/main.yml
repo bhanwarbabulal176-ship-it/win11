@@ -5,78 +5,42 @@ on:
 
 jobs:
   remote-pc:
-    runs-on: windows-2025
+    runs-on: windows-latest
     timeout-minutes: 360
 
     steps:
       - name: Enable Remote Desktop
         shell: powershell
         run: |
-          Set-ItemProperty `
-            -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
-            -Name 'fDenyTSConnections' `
-            -Value 0 `
-            -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 0
 
-          # Keep Network Level Authentication enabled
-          Set-ItemProperty `
-            -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
-            -Name 'UserAuthentication' `
-            -Value 1 `
-            -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name 'UserAuthentication' -Value 1
 
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
           Set-Service -Name TermService -StartupType Automatic
           Restart-Service -Name TermService -Force
 
-          Write-Host "Remote Desktop enabled."
-
       - name: Create RDP User
         shell: powershell
         env:
           RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:RDP_PASSWORD)) {
-              throw "RDP_PASSWORD secret is missing."
+          if (:IsNullOrWhiteSpace($env:RDP_PASSWORD)) {
+            throw "RDP_PASSWORD secret is missing."
           }
 
-          $SecurePassword = ConvertTo-SecureString `
-            $env:RDP_PASSWORD `
-            -AsPlainText `
-            -Force
+          $SecurePassword = ConvertTo-SecureString $env:RDP_PASSWORD -AsPlainText -Force
 
           if (Get-LocalUser -Name "RDP" -ErrorAction SilentlyContinue) {
-              Set-LocalUser `
-                -Name "RDP" `
-                -Password $SecurePassword
+            Set-LocalUser -Name "RDP" -Password $SecurePassword
           }
           else {
-              New-LocalUser `
-                -Name "RDP" `
-                -Password $SecurePassword `
-                -AccountNeverExpires `
-                -PasswordNeverExpires
+            New-LocalUser -Name "RDP" -Password $SecurePassword
           }
 
-          $groups = @(
-              "Administrators",
-              "Remote Desktop Users"
-          )
-
-          foreach ($group in $groups) {
-              try {
-                  Add-LocalGroupMember `
-                    -Group $group `
-                    -Member "RDP" `
-                    -ErrorAction Stop
-              }
-              catch {
-                  Write-Host "RDP user is already in $group or membership exists."
-              }
-          }
-
-          Write-Host "RDP account ready."
+          Add-LocalGroupMember -Group "Administrators" -Member "RDP" -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP" -ErrorAction SilentlyContinue
 
       - name: Install Tailscale
         shell: powershell
@@ -92,17 +56,13 @@ jobs:
             -ArgumentList "/i `"$Installer`" /quiet /norestart" `
             -Wait
 
-          Remove-Item $Installer -Force
-
-          Write-Host "Tailscale installed."
-
-      - name: Connect to Tailscale
+      - name: Connect Tailscale
         shell: powershell
         env:
           TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:TS_AUTHKEY)) {
-              throw "TAILSCALE_AUTHKEY secret is missing."
+          if (:IsNullOrWhiteSpace($env:TS_AUTHKEY)) {
+            throw "TAILSCALE_AUTHKEY secret is missing."
           }
 
           $TS = "$env:ProgramFiles\Tailscale\tailscale.exe"
@@ -111,60 +71,26 @@ jobs:
             --authkey="$env:TS_AUTHKEY" `
             --hostname="github-pc-$env:GITHUB_RUN_ID"
 
-          $IP = $null
-
-          for ($i = 0; $i -lt 20; $i++) {
-
-              $IP = (& $TS ip -4 |
-                    Select-Object -First 1)
-
-              if ($IP) {
-                  break
-              }
-
-              Start-Sleep -Seconds 3
-          }
+          $IP = (& $TS ip -4 | Select-Object -First 1)
 
           if (-not $IP) {
-              throw "Could not obtain Tailscale IP."
+            throw "Could not obtain Tailscale IP."
           }
 
           "TAILSCALE_IP=$IP" >> $env:GITHUB_ENV
 
-          Write-Host ""
-          Write-Host "=================================="
-          Write-Host "       REMOTE PC READY"
-          Write-Host "=================================="
-          Write-Host "IP       : $IP"
-          Write-Host "Username : RDP"
-          Write-Host "Password : Your RDP_PASSWORD secret"
-          Write-Host "=================================="
+          Write-Host "Tailscale IP: $IP"
 
-      - name: Verify RDP
+      - name: Verify
         shell: powershell
         run: |
-          $Result = Test-NetConnection `
+          Test-NetConnection `
             -ComputerName $env:TAILSCALE_IP `
             -Port 3389
 
-          if (-not $Result.TcpTestSucceeded) {
-              throw "RDP connection test failed."
-          }
-
-          Write-Host "RDP port 3389 is accessible."
-
-      - name: Keep Remote PC Running
+      - name: Keep Alive
         shell: powershell
         run: |
-          Write-Host ""
-          Write-Host "======================================"
-          Write-Host " Remote Windows machine is running"
-          Write-Host " Tailscale IP : $env:TAILSCALE_IP"
-          Write-Host " Username     : RDP"
-          Write-Host " Max runtime  : 6 hours"
-          Write-Host "======================================"
-
           while ($true) {
-              Write-Host "[$(Get-Date)] Remote PC active"
-              Start-Sleep -Seconds 300
+            Start-Sleep -Seconds 300
           }

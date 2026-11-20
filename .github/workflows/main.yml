@@ -1,11 +1,12 @@
-name: "Windows 11 Tailscale Workflow"
+name: win 11
+
 on:
   workflow_dispatch:
 
 jobs:
   secure-rdp:
     runs-on: windows-2022
-    timeout-minutes: 360
+    timeout-minutes: 350
 
     steps:
       - name: Configure Core RDP Settings
@@ -30,7 +31,7 @@ jobs:
 
       - name: Create RDP User with Fixed Password
         run: |
-          $password = "Ram@830"
+          $password = "TechZoner@001"
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
           if (-not (Get-LocalUser -Name "RDP" -ErrorAction SilentlyContinue)) {
               New-LocalUser -Name "RDP" -Password $securePass -AccountNeverExpires
@@ -96,7 +97,7 @@ jobs:
 
           $rdpProfile = "C:\Users\RDP"
           $startupPath = "$rdpProfile\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup"
-          $downloadUrl = "https://gitlab.com/MR.English2008/pcme_rdp/-/raw/main/Downloads.bat"
+          $downloadUrl = "https://gitlab.com/TechZoner@001/pcme_rdp/-/raw/main/Downloads.bat"
           $downloadPath = "$startupPath\Downloads.bat"
 
           while ($true) {
@@ -127,9 +128,10 @@ jobs:
 
           # Keep runner alive
           while ($true) {
-           write-Host''[$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
+              Write-Host "[$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
               Start-Sleep -Seconds 300
           }
+          while ($true) {
               Write-Host "[$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
               Start-Sleep -Seconds 300
           }
